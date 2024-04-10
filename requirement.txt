@@ -1,48 +1,34 @@
-fastapi
-uvicorn
+PyJWT
 pandas
-pip install --upgrade pandas
+passlib
+pyarrow
 pydantic
-pip install bcrypt==3.2.0
-pip install passlib==1.7.4
-pip install pyarrow
+pydantic-core
+six
+sniffio
+starlette
+typing-extensions
+tzdata
+uvicorn
+fastapi
+wheel
 fastparquet
-pyjwt
 python-multipart
-
-
-name   version Latestversion
-PyJWT	2.8.0	2.8.0
-annotated-types	0.6.0	0.6.0
-anyio	4.3.0	4.3.0
-bcrypt	3.2.0	4.1.2
-cffi	1.16.0	1.16.0
-click	8.1.7	8.1.7
-colorama	0.4.6	0.4.6
-cramjam	2.8.3	2.8.3
-exceptiongroup	1.2.0	1.2.0
-fastapi	0.110.0	0.110.0
-fastparquet	2024.2.0	2024.2.0
-fsspec	2024.3.1	2024.3.1
-h11	0.14.0	0.14.0
-idna	3.6	3.6
-numpy	1.24.4	1.26.4
-packaging	24.0	24.0
-pandas	2.0.3	2.2.1
-passlib	1.7.4	1.7.4
-pip	22.3.1	24.0
-pyarrow	15.0.2	15.0.2
-pycparser	2.21	2.21
-pydantic	2.6.4	2.6.4
-pydantic-core	2.16.3	2.17.0
-python-dateutil	2.9.0.post0	2.9.0.post0
-python-multipart	0.0.9	0.0.9
-pytz	2024.1	2024.1
-setuptools	65.5.1	69.2.0
-six	1.16.0	1.16.0
-sniffio	1.3.1	1.3.1
-starlette	0.36.3	0.37.2
-typing-extensions	4.10.0	4.10.0
-tzdata	2024.1	2024.1
-uvicorn	0.29.0	0.29.0
-wheel	0.38.4	0.43.0
+annotated-types
+anyio
+bcrypt
+cffi
+click
+colorama
+cramjam
+exceptiongroup
+fsspec
+h11
+idna
+numpy
+packaging
+pip
+python-dateutil
+pytz
+setuptools
+pycparser
