@@ -1,9 +1,12 @@
 version: '1.0'
 services:
   web:
+    pythonVersion: 3.12
     env:
       PORT: 8080
     github:
       branch: master
-    buildCommand: pip install -r requirement.txt
+    buildCommand: |
+      apt-get update && apt-get install -y python3-pip
+      pip install -r requirements.txt
     runCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
