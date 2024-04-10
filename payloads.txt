@@ -1,0 +1,80 @@
+http://0.0.0.0:8080/signup/
+
+{
+    "username": "bobbly",
+    "password": "bobbly123",
+    "email": "bobbly@example.com",
+    "mobileNo": "1234567893",
+    "fullName":""
+}
+
+
+http://0.0.0.0:8080/login/
+
+{
+    "username": "bobbly",
+    "password": "bobbly123",
+    "email": "bobbly@example.com",
+    "mobileNo":"1234567893"
+}
+
+
+http://0.0.0.0:8080/save_personal_expense
+
+{
+    "username": "user1",
+    "amount": 100320,
+    "expenseName":"Mytemp1"
+}
+
+Authorization:Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VybmFtZSI6InVzZXIyIiwiZXhwIjoxNzExNDU1MjM1fQ.xv8fAe_lJGFlGcC1HGvhLmQ4aX_K3ZcYTVHRFADneJQ
+
+
+http://0.0.0.0:8080/split_expense
+
+{
+    "friends": ["user5", "user6", "user7"],
+    "amount": 1500,
+    "added_by":"user2"
+}
+
+
+
+http://0.0.0.0:8080/add_friend/
+{
+"friendUsername":"bobbly",
+"friendUserId":"bobbly329512",
+"mobileNo":"1234567893",
+"userId":"umed",
+"TotalSplittedAmount":0,
+"CalculatedMoney":0,
+"amountFromFriend":0
+}
+
+
+http://0.0.0.0:8080/add_expense/
+
+{
+"userId":"umed",
+"TotalSplittedAmount":0,
+"FriendsBetweenSplitting":["user1","sani","user2"]
+}
+
+
+http://0.0.0.0:8080/get_friend_expenses/
+
+{
+    "userId": "umed"
+}
+
+
+
+http://0.0.0.0:8080/settle_amount/
+
+{
+    "userId": "umed",
+    "friendUsername": "user2"
+}
+
+
+
