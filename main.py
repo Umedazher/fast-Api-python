@@ -1,26 +1,22 @@
 from fastapi import FastAPI, HTTPException, Depends
 from pydantic import BaseModel
 import pandas as pd
-from passlib.context import CryptContext
 import uvicorn as uvicorn
 import pyarrow as pa
 import pyarrow.parquet as pq
 import os
-
 from starlette.middleware.cors import CORSMiddleware
-
 from authentication.auth import oauth2_scheme
 from authentication.jwt import create_access_token, decode_token
 from authentication.password import verify_password, hash_password
+from commonBo import save_expense_history, get_customer_by_username, username_exists, phone_number_exists, \
+    get_user_details, create_pending_requests_parquet, add_friend_to_connections, generate_user_id, \
+    create_connections_parquet, create_initially_connections_parquet, update_friend_expense
 from models.user import User, ExpensePayload, SplitExpensePayload, Customer, CustomerInDB
 from datetime import datetime
 from typing import List
-import random
-import string
 
 app = FastAPI()
-# Password hashing context
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 app.add_middleware(
     CORSMiddleware,
@@ -29,94 +25,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-
-# Create Parquet file structure
-# if not os.path.exists('data/'):
-#     os.makedirs('data/')
-# if not os.path.exists('data/personal_expenses.parquet'):
-#     df_personal_expenses = pd.DataFrame(columns=['username', 'date','expenseName', 'amount'])
-#     df_personal_expenses.to_parquet('data/personal_expenses.parquet', index=False)
-
-
-@app.post("/save_personal_expense/")
-async def save_personal_expense(payload: ExpensePayload, token: str = Depends(oauth2_scheme)):
-    user_data = decode_token(token)
-    username = user_data.get("username")
-
-    # Validate payload
-    if not payload.username or not payload.amount:
-        raise HTTPException(status_code=400, detail="Username and amount are required")
-
-    # Save personal expense
-    date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    data = {'username': [payload.username], 'date': [date], 'expenseName': [payload.expenseName],
-            'amount': [payload.amount]}
-    df = pd.DataFrame(data)
-
-    file_path = 'data/personal_expenses.parquet'
-    if os.path.exists(file_path):
-        existing_table = pq.read_table(file_path)
-        new_table = pa.Table.from_pandas(df)
-        combined_table = pa.concat_tables([existing_table, new_table])
-        pq.write_table(combined_table, file_path)
-    else:
-        df.to_parquet(file_path, index=False)
-
-    return {"message": "Personal expense saved successfully"}
-
-
-@app.post("/split_expense/")
-async def split_expense(payload: SplitExpensePayload):
-    amount = payload.amount
-    friends = payload.friends
-    added_by = payload.added_by
-
-    # Validate friends, amount, and added_by
-    if not friends:
-        raise HTTPException(status_code=400, detail="List of friends is required")
-    if amount <= 0:
-        raise HTTPException(status_code=400, detail="Amount must be greater than zero")
-    if not added_by:
-        raise HTTPException(status_code=400, detail="Username of the user who added the expense is required")
-
-    # Split expense among friends
-    share = amount / len(friends)
-    for friend in friends:
-        # Save split expense for each friend
-        data = {'username': [friend], 'date': [datetime.now().strftime("%Y-%m-%d %H:%M:%S")], 'amount': [share],
-                'added_by': [added_by]}
-        df = pd.DataFrame(data)
-        file_path = f'data/{added_by}_split_expenses_{friend}.parquet'
-        if os.path.exists(file_path):
-            table = pa.Table.from_pandas(df)
-            existing_table = pq.read_table(file_path)
-            updated_table = pa.concat_tables([existing_table, table])
-            pq.write_table(updated_table, file_path)
-        else:
-            df.to_parquet(file_path, index=False)
-    return {"message": "Expense split among friends successfully"}
-
-
-def get_customer_by_username(username: str):
-    df = pd.read_parquet('data/customer_details.parquet')
-    customer_data = df[df['username'] == username]
-    if customer_data.empty:
-        return None
-    customer = CustomerInDB(username=customer_data['username'].iloc[0],
-                            hashed_password=customer_data['hashed_password'].iloc[0],
-                            mobileNo=customer_data['mobileNo'].iloc[0], email=customer_data['email'].iloc[0],
-                            fullName=customer_data['fullName'].iloc[0], userId=customer_data['userId'].iloc[0])
-
-    return customer
-
-
-def verify_password(plain_password, hashed_password):
-    return pwd_context.verify(plain_password, hashed_password)
-
-
-def hash_password(password):
-    return pwd_context.hash(password)
 
 
 @app.post("/signup/")
@@ -156,7 +64,6 @@ async def signup(customer: Customer):
         updated_table = pa.concat_tables([existing_table, table])
         try:
             pq.write_table(updated_table, file_path)
-            # return {"message": "Customer signed up successfully", "Response": "Success"}
         except Exception as e:
             return {"message": "Not able to Sign Up", "Response": "Failure"}
     else:
@@ -169,32 +76,6 @@ async def signup(customer: Customer):
     # Create connections Parquet file for the user
     create_initially_connections_parquet(user_id, customer.username, customer.fullName)
     return {"message": "Customer signed up successfully", "Response": "Success"}
-
-
-def generate_user_id(username):
-    # Generate a random string of digits
-    random_digits = ''.join(random.choices(string.digits, k=6))
-    # Concatenate username with random digits
-    user_id = f"{username}{random_digits}"
-    return user_id
-
-
-def username_exists(username: str):
-    file_path = 'data/customer_details.parquet'
-    if os.path.exists(file_path):
-        df = pd.read_parquet(file_path)
-        return username in df['username'].values
-    else:
-        return False
-
-
-def phone_number_exists(phone_number: str):
-    file_path = 'data/customer_details.parquet'
-    if os.path.exists(file_path):
-        df = pd.read_parquet(file_path)
-        return phone_number in df['mobileNo'].values
-    else:
-        return False
 
 
 @app.post("/login/")
@@ -222,10 +103,13 @@ async def protected_route():
 
 # API to add a friend
 @app.post("/add_friend/")
-async def add_friend(payload: dict):
+async def add_friend(payload: dict, token: str = Depends(oauth2_scheme)):
+    user_data = decode_token(token)
+    username = user_data.get("username")
+
     # Check if payload is valid
     if "friendUsername" not in payload or "mobileNo" not in payload or "userId" not in payload or "friendUserId" not in payload:
-        raise HTTPException(status_code=400, detail="Invalid payload")
+        return {"message": "Invalid payload", "Response": "Failure"}
 
     friendUsername = payload["friendUsername"]
     friendFullName = payload["fullName"]
@@ -238,9 +122,9 @@ async def add_friend(payload: dict):
 
     # Check if friend's username and mobile number exist
     if not username_exists(friendUsername):
-        raise HTTPException(status_code=400, detail="Friend's username does not exist")
+        return {"message": "Friend's username does not exist", "Response": "Failure"}
     if not phone_number_exists(mobileNo):
-        raise HTTPException(status_code=400, detail="Mobile number does not exist")
+        return {"message": "Mobile number does not exist", "Response": "Failure"}
 
     # Add friend to user's connections
     create_connections_parquet(userId)
@@ -260,55 +144,24 @@ async def add_friend(payload: dict):
     return {"message": f"Friend '{friendUsername}' added successfully"}
 
 
-# Function to get user details from customer_details.parquet
 
-def get_user_details(userId: str):
-    file_path = 'data/customer_details.parquet'
-    df = pd.read_parquet(file_path)
-    user_row = df[df['userId'] == userId]
-    if not user_row.empty:
-        user_details = {
-            'username': user_row['username'].iloc[0],
-            'userId': user_row['userId'].iloc[0],
-            'fullName': user_row['fullName'].iloc[0]
-        }
-        return user_details
-    else:
-        return None
-
-
-# Function to create Parquet file for user's connections
-def create_initially_connections_parquet(userId: str, username: str, fullName: str):
-    file_path = f'data/MyConnection_{userId}.parquet'
-    df = pd.DataFrame(
-        columns=['friendUsername', 'friendUserId', 'expenseAddedBy', 'TotalSplittedAmount', 'amountFromFriend',
-                 'CalculatedMoney'])
-
-    df.loc[0] = [username, userId, username, 0, 0, 0]  # Add user's own details as the first entry
-    df.to_parquet(file_path, index=False)
-
-
-# Function to create parquet file for user's connections
-def create_connections_parquet(userId: str):
-    file_path = f'data/MyConnection_{userId}.parquet'
-    if not os.path.exists(file_path):
-        df = pd.DataFrame(
-            columns=['fullName', 'friendUsername', 'friendUserId', 'expenseAddedBy', 'TotalSplittedAmount',
-                     'amountFromFriend', 'CalculatedMoney'])
-        df.to_parquet(file_path, index=False)
 
 
 # API to add an expense
 @app.post("/add_expense/")
-async def add_expense(payload: dict):
+async def add_expense(payload: dict, token: str = Depends(oauth2_scheme)):
+    user_data = decode_token(token)
+    username = user_data.get("username")
+
     # Check if payload is valid
     if "userId" not in payload or "TotalSplittedAmount" not in payload or "FriendsBetweenSplitting" not in payload:
-        raise HTTPException(status_code=400, detail="Invalid payload")
+        return {"message": "Invalid payload", "Response": "Failure"}
 
     added_by = payload["userId"]
     expense_amount = payload["TotalSplittedAmount"]
     friends = payload["FriendsBetweenSplitting"]
 
+    await save_expense_history(payload)
     # Check if friend's username exists in user's connections
     file_path = f'data/MyConnection_{added_by}.parquet'
     if os.path.exists(file_path):
@@ -325,60 +178,13 @@ async def add_expense(payload: dict):
         return {"message": "You haven't added any friends yet", "Response": "Failure"}
 
 
-def update_friend_expense(userId: str, friend_userId: str, amount: float):
-    file_path = f'data/MyConnection_{userId}.parquet'
-    if os.path.exists(file_path):
-        df = pd.read_parquet(file_path)
-        if friend_userId in df['friendUserId'].values:
-            # Update friend's expense amount
-            df.loc[df['friendUserId'] == friend_userId, 'TotalSplittedAmount'] += amount
 
-            # Get the updated TotalSplittedAmount for the friend
-            amount_update_in_friends_file = \
-                df.loc[df['friendUserId'] == friend_userId, 'TotalSplittedAmount'].values[0]
-
-            # Save the changes to the user's file
-            df.to_parquet(file_path, index=False)
-
-            # Update friend's amountFromFriend in friend's file
-            friend_file_path = f'data/MyConnection_{friend_userId}.parquet'
-            if os.path.exists(friend_file_path):
-                friend_df = pd.read_parquet(friend_file_path)
-                friend_df.loc[
-                    friend_df['friendUserId'] == userId, 'amountFromFriend'] = -amount_update_in_friends_file
-                friend_df.to_parquet(friend_file_path, index=False)
-
-                # Update user's amountFromFriend in user's file
-                user_amount_from_friend = -amount_update_in_friends_file
-                amount_update_in_My_file = \
-                    friend_df.loc[friend_df['friendUserId'] == userId, 'TotalSplittedAmount'].values[0]
-                user_file_path = f'data/MyConnection_{userId}.parquet'
-                if os.path.exists(user_file_path):
-                    user_df = pd.read_parquet(user_file_path)
-                    user_df.loc[
-                        user_df['friendUserId'] == friend_userId, 'amountFromFriend'] = -amount_update_in_My_file
-                    user_df.to_parquet(user_file_path, index=False)
-
-
-# @app.post("/get_friend_expenses/")
-# async def get_friend_expenses(payload: dict):
-#     userId = payload.get("userId")
-#     if not userId:
-#         return {"message": "User ID is required in the payload", "Response": "Failure"}
-#
-#     file_path = f'data/MyConnection_{userId}.parquet'
-#     if os.path.exists(file_path):
-#         df = pd.read_parquet(file_path)
-#
-#         CustomerData = df[
-#             ['friendUsername', 'friendUserId', 'expenseAddedBy', 'TotalSplittedAmount', 'amountFromFriend']].to_dict(
-#             orient='records')
-#         return {"customerData": CustomerData, "Response": "Success"}
-#     else:
-#         return {"message": "No expenses found for the user", "Response": "Failure"}
 
 @app.post("/get_friend_expenses/")
-async def get_friend_expenses(payload: dict):
+async def get_friend_expenses(payload: dict, token: str = Depends(oauth2_scheme)):
+    user_data = decode_token(token)
+    username = user_data.get("username")
+
     userId = payload.get("userId")
     if not userId:
         return {"message": "User ID is required in the payload", "Response": "Failure"}
@@ -405,7 +211,10 @@ async def get_friend_expenses(payload: dict):
 
 
 @app.post("/settle_amount/")
-async def settle_amount(payload: dict):
+async def settle_amount(payload: dict, token: str = Depends(oauth2_scheme)):
+    user_data = decode_token(token)
+    username = user_data.get("username")
+
     userId = payload.get("userId")
     friendUserId = payload.get("friendUserId")
     if not userId or not friendUserId:
@@ -427,74 +236,17 @@ async def settle_amount(payload: dict):
         return {"message": "No expenses found for the user"}
 
 
-# # API to get all users with friendship status
-# @app.post("/get_all_users/")
-# async def get_all_users(request_payload: dict):
-#     # Check if user ID exists
-#     userId = request_payload.get("userId")
-#     print(userId)
-#     if not os.path.exists(f'data/customer_details.parquet'):
-#         raise HTTPException(status_code=404, detail="User ID not found")
-#
-#     # Read customer details
-#     customer_details_df = pd.read_parquet('data/customer_details.parquet')
-#
-#     # Check if user has any connections
-#     connections_file_path = f'data/MyConnection_{userId}.parquet'
-#     if os.path.exists(connections_file_path):
-#         connections_df = pd.read_parquet(connections_file_path)
-#         existing_friends = set(connections_df['friendUserId'])
-#     else:
-#         existing_friends = set()
-#
-#     # Check if user has any pending requests
-#     pending_requests_file_path = 'data/PendingRequests.parquet'
-#     if os.path.exists(pending_requests_file_path):
-#         pending_requests_df = pd.read_parquet(pending_requests_file_path)
-#         requested_users = set(pending_requests_df[pending_requests_df['requestedUserId'] == userId]['requesterUserId'])
-#         requester_users = set(pending_requests_df[pending_requests_df['requesterUserId'] == userId]['requestedUserId'])
-#         pending_requests_users = requested_users.union(requester_users)
-#     else:
-#         pending_requests_users = set()
-#
-#     # Prepare response
-#     users = []
-#     for index, row in customer_details_df.iterrows():
-#         print(customer_details_df)
-#         user_id = row['userId']
-#         username = row['username']
-#         mobileNo = row['mobileNo']
-#         fullName = row['fullName']
-#         email = row['email']
-#         friendship_status = 'not_friend'
-#
-#         if user_id in existing_friends:
-#             friendship_status = 'added_friend'
-#         elif user_id in pending_requests_users:
-#             friendship_status = 'requested_friend'
-#
-#         user_info = {
-#             "userId": user_id,
-#             "username": username,
-#             "fullName": fullName,
-#             "mobileNo": mobileNo,
-#             "email": email,
-#             "friendshipStatus": friendship_status
-#         }
-#         users.append(user_info)
-#
-#     return users
-
-
 # API to get all users with friendship status
 @app.post("/get_all_users/")
-async def get_all_users(request_payload: dict):
+async def get_all_users(request_payload: dict, token: str = Depends(oauth2_scheme)):
+    user_data = decode_token(token)
+    username = user_data.get("username")
     # Check if user ID exists
     userId = request_payload.get("userId")
     if not os.path.exists(f'data/customer_details.parquet'):
-        raise HTTPException(status_code=404, detail="User ID not found")
+        return {"message": "User ID not found", "Response": "Failure"}
 
-    # Read customer details
+        # Read customer details
     customer_details_df = pd.read_parquet('data/customer_details.parquet')
 
     # Check if user has any connections
@@ -548,7 +300,10 @@ async def get_all_users(request_payload: dict):
 
 
 @app.post("/send_friend_request/")
-async def send_friend_request(request_payload: dict):
+async def send_friend_request(request_payload: dict, token: str = Depends(oauth2_scheme)):
+    user_data = decode_token(token)
+    username = user_data.get("username")
+
     requesterUserId = request_payload.get("requesterUserId")
     requestedUserId = request_payload.get("requestedUserId")
 
@@ -569,17 +324,12 @@ async def send_friend_request(request_payload: dict):
     return {"message": "Friend request sent successfully"}
 
 
-# Function to create parquet file for pending friend requests
-def create_pending_requests_parquet():
-    file_path = 'data/PendingRequests.parquet'
-    if not os.path.exists(file_path):
-        df = pd.DataFrame(columns=['requesterUserId', 'requestedUserId'])
-        df.to_parquet(file_path, index=False)
-
-
 # API to accept a friend request
 @app.post("/accept_friend_request/")
-async def accept_friend_request(accept_payload: dict):
+async def accept_friend_request(accept_payload: dict, token: str = Depends(oauth2_scheme)):
+    user_data = decode_token(token)
+    username = user_data.get("username")
+    
     requesterUserId = accept_payload.get("requesterUserId")
     requestedUserId = accept_payload.get("requestedUserId")
 
@@ -615,27 +365,9 @@ async def accept_friend_request(accept_payload: dict):
 
         return {"message": "Friend request accepted successfully"}
     else:
-        raise HTTPException(status_code=404, detail="Friend request not found")
-
-
-def add_friend_to_connections(data, userid):
-    file_path = f'data/MyConnection_{userid}.parquet'
-    df = pd.read_parquet(file_path)
-    print(df)
-    print(data)
-    print(userid)
-    print(data.get("userId"))
-    if data.get("userId") not in df['friendUserId'].values:
-        # new_data = {'friendUsername': [data.username], 'friendUserId': [data.userId], 'expenseAddedBy': [userid],
-        #             'TotalSplittedAmount': [0], 'amountFromFriend': [0], 'CalculatedMoney': [0]}
-        new_data = {'friendUsername': [data.get("username")], 'friendUserId': [data.get("userId")],
-                    'expenseAddedBy': [userid],
-                    'TotalSplittedAmount': [0], 'amountFromFriend': [0], 'CalculatedMoney': [0]}
-        new_df = pd.DataFrame(new_data)
-        df = pd.concat([df, new_df], ignore_index=True)
-        df.to_parquet(file_path, index=False)
+        return {"message": "Friend request not found", "Response": "Failure"}
 
 
 if __name__ == "__main__":
-    # uvicorn.run(app, host="0.0.0.0", port=8080)
-    uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 8080)), reload=True)
+    uvicorn.run(app, host="0.0.0.0", port=8080)
+    # uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 8080)), reload=True)
