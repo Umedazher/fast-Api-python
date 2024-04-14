@@ -329,7 +329,7 @@ async def send_friend_request(request_payload: dict, token: str = Depends(oauth2
 async def accept_friend_request(accept_payload: dict, token: str = Depends(oauth2_scheme)):
     user_data = decode_token(token)
     username = user_data.get("username")
-    
+
     requesterUserId = accept_payload.get("requesterUserId")
     requestedUserId = accept_payload.get("requestedUserId")
 
@@ -369,5 +369,5 @@ async def accept_friend_request(accept_payload: dict, token: str = Depends(oauth
 
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8080)
-    # uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 8080)), reload=True)
+    # uvicorn.run(app, host="0.0.0.0", port=8080)
+    uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 8080)), reload=True)
