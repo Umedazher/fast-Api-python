@@ -76,5 +76,11 @@ http://0.0.0.0:8080/settle_amount/
     "friendUsername": "user2"
 }
 
+http://0.0.0.0:8080/expense_history/
+
+{
+    "userId": "umed",
+}
+
 
 

@@ -229,11 +229,11 @@ async def settle_amount(payload: dict, token: str = Depends(oauth2_scheme)):
             df.loc[df['friendUserId'] == friendUserId, 'amountFromFriend'] = 0
             df.loc[df['friendUserId'] == friendUserId, 'CalculatedMoney'] = 0
             df.to_parquet(file_path, index=False)
-            return {"message": f"Amount settled with friend '{friendUserId}' successfully"}
+            return {"message": f"Amount settled with friend '{friendUserId}' successfully", "Response": "Success"}
         else:
-            return {"message": f"Friend '{friendUserId}' not found in the user's connections"}
+            return {"message": f"Friend '{friendUserId}' not found in the user's connections", "Response": "Failure"}
     else:
-        return {"message": "No expenses found for the user"}
+        return {"message": "No expenses found for the user", "Response": "Failure"}
 
 
 # API to get all users with friendship status
@@ -321,7 +321,7 @@ async def send_friend_request(request_payload: dict, token: str = Depends(oauth2
     pending_requests_df = pd.concat([pending_requests_df, new_request_df], ignore_index=True)
     pending_requests_df.to_parquet('data/PendingRequests.parquet', index=False)
 
-    return {"message": "Friend request sent successfully"}
+    return {"message": "Friend request sent successfully","Response": "Success"}
 
 
 # API to accept a friend request
@@ -368,6 +368,37 @@ async def accept_friend_request(accept_payload: dict, token: str = Depends(oauth
         return {"message": "Friend request not found", "Response": "Failure"}
 
 
+@app.post("/My_Spends/")
+async def get_expense_history(payload: dict):
+    userId = payload.get("userId")
+    file_path = 'data/expense_history.parquet'
+    if not os.path.exists(file_path):
+        return {"message": "Expense history data not found", "Response": "Failure"}
+
+    df = pd.read_parquet(file_path)
+    user_expenses = df[df['SavingUser'] == userId]
+
+    if user_expenses.empty:
+        return {"message": "Expense history data not found", "Response": "Failure"}
+
+    return user_expenses.to_dict(orient='records')
+
+@app.post("/expense_history/")
+async def get_expense_history(payload: dict):
+    userId = payload.get("userId")
+    file_path = 'data/expense_history.parquet'
+    if not os.path.exists(file_path):
+        return {"message": "Expense history data not found", "Response": "Failure"}
+
+    df = pd.read_parquet(file_path)
+    user_expenses = df[df['Friends'] == userId]
+
+    if user_expenses.empty:
+        return {"message": "Expense history data not found", "Response": "Failure"}
+
+    return user_expenses.to_dict(orient='records')
+
+
 if __name__ == "__main__":
-    # uvicorn.run(app, host="0.0.0.0", port=8080)
-    uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 8080)), reload=True)
+    uvicorn.run(app, host="0.0.0.0", port=8080)
+    # uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 8080)), reload=True)
