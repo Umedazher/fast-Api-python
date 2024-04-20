@@ -399,6 +399,6 @@ async def get_expense_history(payload: dict):
     return user_expenses.to_dict(orient='records')
 
 
-if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8080)
-    # uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 8080)), reload=True)
+# if __name__ == "__main__":
+#     uvicorn.run(app, host="0.0.0.0", port=8080)
+#     # uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 8080)), reload=True)
